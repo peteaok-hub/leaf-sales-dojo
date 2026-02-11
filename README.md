@@ -1,4 +1,4 @@
-\# Leaf Home Sales Dojo 🚘
+\# Wyndham Vacation Sales Dojo 🚘
 
 A mobile-first AI roleplay trainer for high-ticket in-home sales.
 
@@ -11,4 +11,5 @@ A mobile-first AI roleplay trainer for high-ticket in-home sales.
 \- Random Customer Moods (Angry, Skeptical, Tired)
 
 \- Real-time Sales Coaching
+
 
