@@ -40,11 +40,18 @@ st.markdown("""
 with st.sidebar:
     st.header("⚙️ Settings")
     
-    # 1. API KEY HANDLING
-    if "GEMINI_API_KEY" in st.secrets:
-        api_key = st.secrets["GEMINI_API_KEY"]
-        st.success("✅ API Key Loaded")
-    else:
+    # 1. API KEY HANDLING (Crash-Proof Version)
+    api_key = None
+    try:
+        # Try to load from secrets file, but don't crash if missing
+        if "GEMINI_API_KEY" in st.secrets:
+            api_key = st.secrets["GEMINI_API_KEY"]
+            st.success("✅ API Key Loaded")
+    except Exception:
+        pass # File not found, ignore and move to manual input
+
+    # Fallback to manual input
+    if not api_key:
         api_key = st.text_input("Gemini API Key", type="password")
     
     # 2. WYNDHAM PERSONAS

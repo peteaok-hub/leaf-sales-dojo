@@ -1,15 +1,20 @@
-\# Wyndham Vacation Sales Dojo 🚘
-
-A mobile-first AI roleplay trainer for high-ticket in-home sales.
+\# 🏖️ Wyndham Owner Dojo (Sales Simulator)
 
 
 
-\*\*Features:\*\*
+This is a roleplay training tool designed to help sales reps practice "In-House" (Owner Update) conversations. It uses Google's \*\*Gemini 2.5 Flash\*\* AI to simulate difficult Wyndham owners (The "Happy" Owner, The "Fee" Hater, etc.).
 
-\- Voice-to-Voice Interaction (Safe for driving)
 
-\- Random Customer Moods (Angry, Skeptical, Tired)
 
-\- Real-time Sales Coaching
+\## ✅ Prerequisites
 
+
+
+You need Python 3.11 installed.
+
+
+
+```bash
+
+pip install streamlit google-generativeai gTTS
 
