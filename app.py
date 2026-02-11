@@ -1,185 +1,264 @@
 import streamlit as st
 import google.generativeai as genai
 from gtts import gTTS
-import random
 import io
-import os
+import random
+import time
 
-# --- PAGE CONFIGURATION (Mobile Optimized) ---
-st.set_page_config(page_title="Wyndham Owner Dojo", page_icon="🏖️", layout="centered")
+# --- PAGE CONFIGURATION ---
+st.set_page_config(page_title="Wyndham Points Dojo", page_icon="💎", layout="centered")
 
-# --- CSS FOR "DRIVE MODE" ---
+# --- CSS STYLING ---
 st.markdown("""
     <style>
     .stButton>button {
-        height: 4em;
+        height: 3.5em;
         width: 100%;
-        font-size: 28px !important;
+        font-size: 24px !important;
         font-weight: bold;
-        background-color: #005596; /* Wyndham Blue */
+        background-color: #005596;
         color: white;
-        border-radius: 12px;
+        border-radius: 10px;
     }
-    .stMarkdown h1 {
-        font-size: 2.5rem !important;
-        text-align: center;
+    .big-stat {
+        font-size: 30px;
+        font-weight: bold;
         color: #005596;
-    }
-    .stAudioInput {
-        transform: scale(1.3);
+        text-align: center;
         margin-bottom: 20px;
+    }
+    .vip-card {
+        padding: 20px;
+        border-radius: 10px;
+        background-color: #f0f2f6;
+        margin-bottom: 10px;
+        border-left: 5px solid #005596;
+    }
+    /* SUCCESS VISUALS */
+    .success-box {
+        padding: 20px;
+        background-color: #d1e7dd;
+        color: #0f5132;
+        border: 2px solid #badbcc;
+        border-radius: 10px;
+        text-align: center;
+        font-size: 24px;
+        font-weight: bold;
+        margin: 20px 0;
     }
     </style>
 """, unsafe_allow_html=True)
 
+# --- HARDCODED WYNDHAM DATA ---
+POINTS_CHART = {
+    "Ocean Walk - 2 BR Deluxe - Prime (July/Aug/Dec)": "325,000",
+    "Ocean Walk - 2 BR Deluxe - High (Feb-June)": "300,000",
+    "Bonnet Creek - 2 BR Deluxe - Prime": "224,000",
+    "Las Vegas (Grand Desert) - 2 BR - Prime": "254,000",
+    "Myrtle Beach (Seawatch) - 2 BR - High": "203,000",
+    "Smokey Mountains (Great Smokies) - 2 BR - Prime": "238,000"
+}
+
+VIP_LEVELS = {
+    "Silver": {"Points": "300k - 499k", "Discount": "25% off (60 days out)", "Upgrade": "1 Month window"},
+    "Gold": {"Points": "500k - 799k", "Discount": "35% off (60 days out)", "Upgrade": "45 Day window"},
+    "Platinum": {"Points": "800k+", "Discount": "50% off (60 days out)", "Upgrade": "60 Day window"}
+}
+
 # --- SIDEBAR: SETTINGS ---
 with st.sidebar:
-    st.header("⚙️ Settings")
+    st.header("⚙️ Dojo Settings")
     
-    # 1. API KEY HANDLING (Crash-Proof Version)
+    # API Key Handling (Crash Proof)
     api_key = None
     try:
-        # Try to load from secrets file, but don't crash if missing
         if "GEMINI_API_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_API_KEY"]
             st.success("✅ API Key Loaded")
     except Exception:
-        pass # File not found, ignore and move to manual input
+        pass 
 
-    # Fallback to manual input
     if not api_key:
         api_key = st.text_input("Gemini API Key", type="password")
+
+    # Mode Selection
+    mode = st.radio("Training Mode:", ["🧠 Points Quiz (Memorize)", "💎 VIP Upsell Simulator"])
     
-    # 2. WYNDHAM PERSONAS
-    persona_type = st.selectbox(
-        "Owner Type:",
-        [
-            "The 'Happy' Owner (Hardest - Doesn't want more)", 
-            "The 'Frustrated' Booker (Can't get dates)", 
-            "The 'Maintenance Fee' Hater", 
-            "The 'RCI' Trader (Confused)"
-        ]
-    )
-    
-    # Chaos Mode (RNG)
-    if "mood" not in st.session_state:
-        st.session_state.mood = random.choice(["Skeptical", "Rushed", "Annoyed", "Relaxed but Cheap"])
-    
-    st.info(f"Current Mood: {st.session_state.mood}")
-    
-    if st.button("Reset / Next Owner"):
-        st.session_state.messages = []
-        st.session_state.mood = random.choice(["Skeptical", "Rushed", "Annoyed", "Relaxed but Cheap"])
+    if st.button("Reset Session"):
+        st.session_state.clear()
         st.rerun()
 
-# --- SYSTEM PROMPT (THE BRAIN) ---
-SYSTEM_PROMPT = f"""
-You are roleplaying as a WYNDHAM OWNER named 'Robert' or 'Karen' at the Ocean Walk Resort in Daytona Beach.
-You are in an "Owner Update" meeting with a Sales Rep (the user).
-You currently own 200,000 Points (Standard Status).
-
-**YOUR PERSONA:** {persona_type}
-**YOUR MOOD:** {st.session_state.mood}
-
-**YOUR OBJECTIONS (Use these):**
-1. "We have enough points. We barely use what we have."
-2. "The maintenance fees are already too high. I'm not paying more."
-3. "I tried to book Christmas last year and it was full. Buying more points won't fix that."
-4. "I'm actually thinking of selling my timeshare, not buying more."
-
-**WIN CONDITION (When to agree):**
-You are stubborn. You will ONLY start to listen/agree if the Rep explains how **VIP STATUS (Silver/Gold)** gives you the **13-Month Booking Window** or **Room Upgrades**. 
-If they just talk about "more vacations," shut them down.
-If they talk about "Access" and "Fixing the Availability," get interested.
-
-**INSTRUCTIONS:**
-1. Listen to the audio input from the user.
-2. Respond verbally (short, natural, 1-2 sentences max).
-3. Do not be polite. Be a real customer who wants to get back to the beach.
-4. Do not describe actions (like *sighs*), just speak the dialogue.
-"""
-
-# --- APP HEADER ---
-st.title("🏖️ Wyndham Owner Dojo")
-st.markdown(f"<div style='text-align: center; font-size: 18px; margin-bottom: 20px;'>Pitching to: <b>{persona_type}</b><br>Mood: <b>{st.session_state.mood}</b></div>", unsafe_allow_html=True)
-
-# Initialize History
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "last_audio" not in st.session_state:
-    st.session_state.last_audio = None
-
-# Configure AI
+# --- AI CONFIG ---
 if api_key:
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
-else:
-    st.warning("⚠️ Enter API Key in Sidebar to Start")
-    st.stop()
 
-# --- AUDIO INPUT (THE MIC) ---
-st.markdown("### 👇 Tap Mic to Pitch")
-audio_value = st.audio_input("Record")
-
-if audio_value:
-    # 1. Add User Audio Placeholder
-    st.session_state.messages.append({"role": "user", "content": "🎤 [Audio Sent]"})
+# --- MODE 1: POINTS QUIZ ---
+if mode == "🧠 Points Quiz (Memorize)":
+    st.title("🧠 Points Mastery Quiz")
     
-    with st.spinner("Owner is thinking..."):
-        try:
-            # 2. Send Audio directly to Gemini
-            audio_bytes = audio_value.read()
-            
-            # Build prompt with history
-            prompt_parts = [SYSTEM_PROMPT]
-            for msg in st.session_state.messages[-4:]: # Keep last 4 turns for context
-                if msg["content"] != "🎤 [Audio Sent]":
-                    prompt_parts.append(f"{msg['role']}: {msg['content']}")
-            
-            prompt_parts.append({"mime_type": "audio/wav", "data": audio_bytes})
-            prompt_parts.append("Respond to this audio as the Wyndham Owner.")
+    # 1. Initialize State Variables
+    if "quiz_score" not in st.session_state:
+        st.session_state.quiz_score = 0
+    if "quiz_state" not in st.session_state:
+        st.session_state.quiz_state = "question" # "question" or "success"
 
-            # Generate Response
-            response = model.generate_content(prompt_parts)
-            ai_text = response.text
+    # 2. Pick a Question (Only if one doesn't exist)
+    if "current_q" not in st.session_state:
+        st.session_state.current_q = random.choice(list(POINTS_CHART.keys()))
+        
+        # LOCK THE OPTIONS SO THEY DON'T SHUFFLE WHILE YOU PLAY
+        correct_answer = POINTS_CHART[st.session_state.current_q]
+        all_values = list(POINTS_CHART.values())
+        distractors = [v for v in all_values if v != correct_answer]
+        
+        # Pick 2 random wrong answers
+        if len(distractors) < 2:
+            current_options = [correct_answer, "154,000", "300,000"]
+        else:
+            current_options = random.sample(distractors, 2) + [correct_answer]
+        
+        random.shuffle(current_options)
+        st.session_state.current_options = current_options
 
-            # 3. Add AI Text to History
-            st.session_state.messages.append({"role": "assistant", "content": ai_text})
-
-            # 4. Convert AI Text to Audio (TTS)
-            tts = gTTS(text=ai_text, lang='en', slow=False)
-            audio_fp = io.BytesIO()
-            tts.write_to_fp(audio_fp)
-            st.session_state.last_audio = audio_fp.getvalue()
-            
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-# --- DISPLAY OUTPUT (Big Audio Player) ---
-if st.session_state.last_audio:
-    st.markdown("### 🔊 Owner Response:")
-    st.audio(st.session_state.last_audio, format='audio/mp3', autoplay=True)
+    # --- DISPLAY LOGIC ---
     
-    # Display text for reference
-    if st.session_state.messages:
-        last_msg = st.session_state.messages[-1]
-        if last_msg["role"] == "assistant":
-            st.info(f"Owner: {last_msg['content']}")
+    if st.session_state.quiz_state == "success":
+        # === VICTORY SCREEN (No Balloons) ===
+        correct_val = POINTS_CHART[st.session_state.current_q]
+        
+        # The Green Card
+        st.markdown(f"""
+            <div class="success-box">
+                ✅ CORRECT!<br>
+                {st.session_state.current_q}<br>
+                = {correct_val} Points
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Next Button
+        if st.button("➡️ NEXT QUESTION"):
+            # Reset for next round
+            del st.session_state.current_q
+            del st.session_state.current_options
+            st.session_state.quiz_state = "question"
+            st.rerun()
 
-# --- COACH BUTTON ---
-st.divider()
-if st.button("👨‍🏫 Grade My Pitch"):
-    with st.spinner("Sales Manager is reviewing tape..."):
-        history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
-        coach_prompt = f"""
-        {history_text}
+    else:
+        # === QUESTION SCREEN ===
+        st.info(f"Score: {st.session_state.quiz_score} | Question: How many points?")
+        st.markdown(f"<div class='big-stat'>{st.session_state.current_q}</div>", unsafe_allow_html=True)
         
-        Analyze my sales pitch for Wyndham Vacation Ownership.
-        1. Did I find the 'Pain' (Availability/Booking issues)?
-        2. Did I pivot to VIP Status/Access instead of just "selling points"?
-        3. Did I handle the "Maintenance Fee" objection correctly (Value vs. Cost)?
+        correct_val = POINTS_CHART[st.session_state.current_q]
+        opts = st.session_state.current_options
         
-        Give me 1 specific tip to close better next time.
-        """
-        coach_resp = model.generate_content(coach_prompt)
-        st.success(coach_resp.text)
+        col1, col2, col3 = st.columns(3)
+        
+        # Button Logic
+        def check(val):
+            if val == correct_val:
+                st.session_state.quiz_score += 1
+                st.session_state.quiz_state = "success"
+                st.rerun()
+            else:
+                st.toast("❌ Wrong! Try again.", icon="💀")
+
+        with col1:
+            if st.button(opts[0]): check(opts[0])
+        with col2:
+            if st.button(opts[1]): check(opts[1])
+        with col3:
+            if st.button(opts[2]): check(opts[2])
+            
+        if st.button("Show Answer (I give up)"):
+            st.warning(f"Answer: {correct_val}")
+
+# --- MODE 2: VIP UPSELL SIMULATOR ---
+elif mode == "💎 VIP Upsell Simulator":
+    st.title("💎 VIP Closing Dojo")
+    st.markdown("Pitch the **Value** of the next tier. Don't just list features.")
+    
+    target_tier = st.selectbox("Target Upgrade:", ["Silver (300k)", "Gold (500k)", "Platinum (800k)"])
+    
+    st.markdown(f"""
+    <div class='vip-card'>
+    <b>Selling: {target_tier}</b><br>
+    Key Benefit 1: {VIP_LEVELS[target_tier.split()[0]]['Discount']}<br>
+    Key Benefit 2: {VIP_LEVELS[target_tier.split()[0]]['Upgrade']}
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Chat Interface
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    
+    # Audio Input
+    audio_val = st.audio_input("Pitch the Upgrade")
+    
+    if audio_val:
+        # User Audio Processing
+        st.session_state.messages.append({"role": "user", "content": "🎤 [Pitch Sent]"})
+        
+        with st.spinner("Customer is thinking..."):
+            try:
+                if not api_key:
+                    st.error("⚠️ Please enter API Key in sidebar first!")
+                else:
+                    audio_bytes = audio_val.read()
+                    
+                    # System Prompt for VIP Mode
+                    sys_prompt = f"""
+                    You are a SKEPTICAL Wyndham Owner. 
+                    The user is trying to upgrade you to {target_tier}.
+                    
+                    **YOUR LOGIC:**
+                    1. If they mention "More Points," say "I don't need more points."
+                    2. If they mention "Discounts" ({VIP_LEVELS[target_tier.split()[0]]['Discount']}), say "That sounds interesting, tell me more."
+                    3. If they mention "Upgrades" ({VIP_LEVELS[target_tier.split()[0]]['Upgrade']}), say "Wait, I can get a bigger room for free?"
+                    
+                    Keep responses short (1 sentence). Be tough but fair.
+                    """
+                    
+                    prompt_parts = [sys_prompt, {"mime_type": "audio/wav", "data": audio_bytes}]
+                    response = model.generate_content(prompt_parts)
+                    
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    
+                    # TTS
+                    tts = gTTS(text=response.text, lang='en')
+                    fp = io.BytesIO()
+                    tts.write_to_fp(fp)
+                    st.audio(fp, format='audio/mp3', autoplay=True)
+                    
+                    st.info(f"Customer: {response.text}")
+                
+            except Exception as e:
+                st.error(f"Error: {e}")
+                
+    # --- COACH BUTTON (RESTORED) ---
+    st.divider()
+    if st.button("👨‍🏫 Grade My Pitch"):
+        with st.spinner("Sales Manager is reviewing tape..."):
+            if not st.session_state.messages:
+                st.error("Record a pitch first!")
+            else:
+                # Compile history
+                history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
+                
+                # Coach Prompt
+                coach_prompt = f"""
+                {history_text}
+                
+                You are a Sales Manager at Wyndham Ocean Walk. Analyze the rep's pitch above.
+                Target Upgrade: {target_tier}
+                
+                1. Did they explain the VALUE of {target_tier} (Discounts/Windows) or just list features?
+                2. Did they handle the customer's skepticism?
+                3. Give 1 specific improvement.
+                """
+                
+                try:
+                    coach_resp = model.generate_content(coach_prompt)
+                    st.success(coach_resp.text)
+                except Exception as e:
+                    st.error(f"Coach Error: {e}")
