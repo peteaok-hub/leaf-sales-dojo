@@ -29,10 +29,6 @@ st.markdown("""
         transform: scale(1.3);
         margin-bottom: 20px;
     }
-    /* Hide the top header/hamburger menu to look like an app */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
