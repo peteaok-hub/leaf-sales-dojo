@@ -6,7 +6,7 @@ import io
 import os
 
 # --- PAGE CONFIGURATION (Mobile Optimized) ---
-st.set_page_config(page_title="Leaf Sales Dojo", page_icon="🚘", layout="centered")
+st.set_page_config(page_title="Wyndham Owner Dojo", page_icon="🏖️", layout="centered")
 
 # --- CSS FOR "DRIVE MODE" ---
 st.markdown("""
@@ -16,13 +16,14 @@ st.markdown("""
         width: 100%;
         font-size: 28px !important;
         font-weight: bold;
-        background-color: #ff4b4b;
+        background-color: #005596; /* Wyndham Blue */
         color: white;
         border-radius: 12px;
     }
     .stMarkdown h1 {
         font-size: 2.5rem !important;
         text-align: center;
+        color: #005596;
     }
     .stAudioInput {
         transform: scale(1.3);
@@ -39,48 +40,65 @@ st.markdown("""
 with st.sidebar:
     st.header("⚙️ Settings")
     
-    # 1. API KEY HANDLING (Secrets First, then Input)
+    # 1. API KEY HANDLING
     if "GEMINI_API_KEY" in st.secrets:
         api_key = st.secrets["GEMINI_API_KEY"]
-        st.success("✅ API Key Loaded from Cloud Secrets")
+        st.success("✅ API Key Loaded")
     else:
         api_key = st.text_input("Gemini API Key", type="password")
     
+    # 2. WYNDHAM PERSONAS
     persona_type = st.selectbox(
-        "Opponent:",
-        ["The Grumpy Skeptic (Robert)", "The 'Price' Shopper", "The 'Talk to Spouse' Staller", "The 'DIY' Handyman"]
+        "Owner Type:",
+        [
+            "The 'Happy' Owner (Hardest - Doesn't want more)", 
+            "The 'Frustrated' Booker (Can't get dates)", 
+            "The 'Maintenance Fee' Hater", 
+            "The 'RCI' Trader (Confused)"
+        ]
     )
     
     # Chaos Mode (RNG)
     if "mood" not in st.session_state:
-        st.session_state.mood = random.choice(["Impatient", "Curious", "Angry", "Tired", "Suspicious"])
+        st.session_state.mood = random.choice(["Skeptical", "Rushed", "Annoyed", "Relaxed but Cheap"])
     
     st.info(f"Current Mood: {st.session_state.mood}")
     
-    if st.button("Reset / New Customer"):
+    if st.button("Reset / Next Owner"):
         st.session_state.messages = []
-        st.session_state.mood = random.choice(["Impatient", "Curious", "Angry", "Tired", "Suspicious"])
+        st.session_state.mood = random.choice(["Skeptical", "Rushed", "Annoyed", "Relaxed but Cheap"])
         st.rerun()
 
-# --- SYSTEM PROMPT ---
+# --- SYSTEM PROMPT (THE BRAIN) ---
 SYSTEM_PROMPT = f"""
-You are roleplaying as a HOMEOWNER named 'Robert' in Volusia County, FL.
-You are speaking to a Salesperson (the user) who is trying to sell you a Leaf Home Bathroom Remodel.
+You are roleplaying as a WYNDHAM OWNER named 'Robert' or 'Karen' at the Ocean Walk Resort in Daytona Beach.
+You are in an "Owner Update" meeting with a Sales Rep (the user).
+You currently own 200,000 Points (Standard Status).
 
 **YOUR PERSONA:** {persona_type}
 **YOUR MOOD:** {st.session_state.mood}
 
+**YOUR OBJECTIONS (Use these):**
+1. "We have enough points. We barely use what we have."
+2. "The maintenance fees are already too high. I'm not paying more."
+3. "I tried to book Christmas last year and it was full. Buying more points won't fix that."
+4. "I'm actually thinking of selling my timeshare, not buying more."
+
+**WIN CONDITION (When to agree):**
+You are stubborn. You will ONLY start to listen/agree if the Rep explains how **VIP STATUS (Silver/Gold)** gives you the **13-Month Booking Window** or **Room Upgrades**. 
+If they just talk about "more vacations," shut them down.
+If they talk about "Access" and "Fixing the Availability," get interested.
+
 **INSTRUCTIONS:**
 1. Listen to the audio input from the user.
-2. Respond verbally (short, 1-2 sentences max).
-3. BE DIFFICULT. Raise objections about price ($15k is too much), trust, or spouse.
-4. Only agree if the user makes a compelling point about "Structural Water Damage" (Subfloor).
-5. Do not describe your actions (like *coughs*), just speak the dialogue.
+2. Respond verbally (short, natural, 1-2 sentences max).
+3. Do not be polite. Be a real customer who wants to get back to the beach.
+4. Do not describe actions (like *sighs*), just speak the dialogue.
 """
 
 # --- APP HEADER ---
-st.title("🚘 Leaf Sales Dojo")
-st.markdown(f"<div style='text-align: center; font-size: 20px; margin-bottom: 20px;'>Vs. <b>{persona_type}</b><br>Mood: <b>{st.session_state.mood}</b></div>", unsafe_allow_html=True)
+st.title("🏖️ Wyndham Owner Dojo")
+st.markdown(f"<div style='text-align: center; font-size: 18px; margin-bottom: 20px;'>Pitching to: <b>{persona_type}</b><br>Mood: <b>{st.session_state.mood}</b></div>", unsafe_allow_html=True)
 
 # Initialize History
 if "messages" not in st.session_state:
@@ -91,33 +109,32 @@ if "last_audio" not in st.session_state:
 # Configure AI
 if api_key:
     genai.configure(api_key=api_key)
-    # UPDATED: Using the 2.5 model that works with your key
     model = genai.GenerativeModel('gemini-2.5-flash')
 else:
-    st.warning("⚠️ Waiting for API Key...")
+    st.warning("⚠️ Enter API Key in Sidebar to Start")
     st.stop()
 
 # --- AUDIO INPUT (THE MIC) ---
-st.markdown("### 👇 Tap Mic to Fight")
+st.markdown("### 👇 Tap Mic to Pitch")
 audio_value = st.audio_input("Record")
 
 if audio_value:
     # 1. Add User Audio Placeholder
     st.session_state.messages.append({"role": "user", "content": "🎤 [Audio Sent]"})
     
-    with st.spinner("Robert is thinking..."):
+    with st.spinner("Owner is thinking..."):
         try:
             # 2. Send Audio directly to Gemini
             audio_bytes = audio_value.read()
             
-            # Build prompt with recent history
+            # Build prompt with history
             prompt_parts = [SYSTEM_PROMPT]
-            for msg in st.session_state.messages[-4:]:
+            for msg in st.session_state.messages[-4:]: # Keep last 4 turns for context
                 if msg["content"] != "🎤 [Audio Sent]":
                     prompt_parts.append(f"{msg['role']}: {msg['content']}")
             
             prompt_parts.append({"mime_type": "audio/wav", "data": audio_bytes})
-            prompt_parts.append("Respond to this audio.")
+            prompt_parts.append("Respond to this audio as the Wyndham Owner.")
 
             # Generate Response
             response = model.generate_content(prompt_parts)
@@ -137,19 +154,29 @@ if audio_value:
 
 # --- DISPLAY OUTPUT (Big Audio Player) ---
 if st.session_state.last_audio:
-    st.markdown("### 🔊 Response:")
+    st.markdown("### 🔊 Owner Response:")
     st.audio(st.session_state.last_audio, format='audio/mp3', autoplay=True)
     
     # Display text for reference
     if st.session_state.messages:
         last_msg = st.session_state.messages[-1]
         if last_msg["role"] == "assistant":
-            st.info(f"Robert: {last_msg['content']}")
+            st.info(f"Owner: {last_msg['content']}")
 
 # --- COACH BUTTON ---
 st.divider()
 if st.button("👨‍🏫 Grade My Pitch"):
-    with st.spinner("Coach is listening..."):
+    with st.spinner("Sales Manager is reviewing tape..."):
         history_text = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
-        coach_resp = model.generate_content(f"{history_text}\n\nAnalyze my sales pitch. Was I confident? Did I pivot to the subfloor issue? Give me 1 tip.")
+        coach_prompt = f"""
+        {history_text}
+        
+        Analyze my sales pitch for Wyndham Vacation Ownership.
+        1. Did I find the 'Pain' (Availability/Booking issues)?
+        2. Did I pivot to VIP Status/Access instead of just "selling points"?
+        3. Did I handle the "Maintenance Fee" objection correctly (Value vs. Cost)?
+        
+        Give me 1 specific tip to close better next time.
+        """
+        coach_resp = model.generate_content(coach_prompt)
         st.success(coach_resp.text)
